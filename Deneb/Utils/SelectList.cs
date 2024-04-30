@@ -1,13 +1,8 @@
 namespace Deneb.Utils;
 
-public class SelectList
+public class SelectList(IReadOnlyList<string> items)
 {
-    private readonly IReadOnlyList<string> _items;
-
-    public SelectList(IReadOnlyList<string> items)
-    {
-        _items = items.Take(Console.WindowHeight - 2).ToList();
-    }
+    private readonly IReadOnlyList<string> _items = items.Take(Console.WindowHeight - 2).ToList();
 
     public int Show(string title)
     {

@@ -14,9 +14,9 @@ public class OpenLibraryService
         throw new NotImplementedException();
     }
 
-    public async Task<IReadOnlyList<Book>> FindBooks(string? title, string? author)
+    public async Task<IReadOnlyList<Book>> FindBooks(BookType type, string? title, string? author)
     {
-        var results = await _client.FindBooks(title, author);
+        var results = await _client.FindBooks(type, title, author);
         
         if (results.Count == 0)
             return new List<Book>();

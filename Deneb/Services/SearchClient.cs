@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Deneb.Models;
 using Deneb.Utils;
 using OpenLibraryNET;
 using OpenLibraryNET.Data;
@@ -9,7 +10,7 @@ public class SearchClient
 {
     private readonly OpenLibraryClient _client = new();
 
-    public async Task<IReadOnlyList<SearchResult>> FindBooks(string? title, string? author)
+    public async Task<IReadOnlyList<SearchResult>> FindBooks(BookType type, string? title, string? author)
     {
         var works = new List<OLWorkData>();
 
@@ -34,10 +35,10 @@ public class SearchClient
         if (results is not null)
             works.AddRange(results);
 
-        return works.Select(WorkToSearchResult).ToList();
+        return works.Select(x => WorkToSearchResult(x, type)).ToList();
     }
 
-    private static SearchResult WorkToSearchResult(OLWorkData work)
+    private static SearchResult WorkToSearchResult(OLWorkData work, BookType type)
     {
         try
         {
@@ -56,7 +57,7 @@ public class SearchClient
             string? description = null;
             if (work.ExtensionData.ContainsKey("first_sentence"))
                 description = work.ExtensionData["first_sentence"].Values<string>().FirstOrDefault();
-
+            
             return new SearchResult
             {
                 Identifier = work.Key.Replace("/works/", ""),
@@ -65,7 +66,8 @@ public class SearchClient
                 Authors = authors,
                 Description = description,
                 FirstPublishedOn = firstPublishedYear,
-                PublishedOn = null
+                PublishedOn = null,
+                Type = type
             };
         }
         catch (Exception ex)

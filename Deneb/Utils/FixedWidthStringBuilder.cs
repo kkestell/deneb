@@ -1,6 +1,7 @@
 using System.Text;
+using Wcwidth;
 
-namespace Djinn.Utils;
+namespace Deneb.Utils;
 
 public enum Alignment
 {
@@ -17,27 +18,43 @@ public class FixedWidthStringBuilder
         if (value is null)
             return;
         
-        var finalWidth = width ?? value.Length;
+        var finalWidth = width ?? StringWidth(value);
 
-        if (finalWidth < 4 && value.Length > finalWidth)
+        if (finalWidth < 4 && StringWidth(value) > finalWidth)
         {
             value = value[..finalWidth];
         }
-        else if (value.Length > finalWidth)
+        else if (StringWidth(value) > finalWidth)
         {
             value = value[..(finalWidth - 3)] + "...";
         }
 
         var formattedValue = align switch
         {
-            Alignment.Left => value.PadRight(finalWidth),
-            Alignment.Right => value.PadLeft(finalWidth),
+            Alignment.Left => PadRight(value, finalWidth),
+            Alignment.Right => PadLeft(value, finalWidth),
             _ => string.Empty
         };
 
         _stringBuilder.Append(formattedValue);
     }
 
+    private static int StringWidth(string str)
+    {
+        return str.Sum(c => UnicodeCalculator.GetWidth(c));
+    }
+    
+    private static string PadRight(string value, int width)
+    {
+        var padding = width - StringWidth(value);
+        return value + new string(' ', padding);
+    }
+    
+    private static string PadLeft(string value, int width)
+    {
+        var padding = width - StringWidth(value);
+        return new string(' ', padding) + value;
+    }
 
     public override string ToString()
     {

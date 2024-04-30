@@ -1,7 +1,6 @@
+using Deneb.Commands;
 using Deneb.Ebooks;
 using Deneb.Models;
-using Deneb.Utils;
-using Djinn.Utils;
 using Timer = System.Timers.Timer;
 
 namespace Deneb.Services;
@@ -24,9 +23,14 @@ public class LibGenDownloader
         _progressTimer.Elapsed += (sender, e) => UpdateProgress();
     }
     
-    public async Task<Epub?> Download()
+    public async Task<FileInfo?> Download()
     {
-        var sources = await _client.Search(_book.Author.Name, _book.Title);
+        var sources = _book.Type switch
+        {
+            BookType.Fiction => await _client.SearchFiction(_book.Title, _book.Author.Name),
+            BookType.NonFiction => await _client.SearchNonFiction(_book.Title, _book.Author.Name),
+            _ => throw new NotImplementedException()
+        };
         
         if (sources.Count == 0)
         {
@@ -41,9 +45,9 @@ public class LibGenDownloader
 
             try
             {
-                var epub = await _client.DownloadResult(source, progress => _progress = (int)progress);
+                var fileInfo = await _client.DownloadResult(source, progress => _progress = (int)progress);
 
-                if (epub is null)
+                if (fileInfo is null)
                 {
                     Log.Error("Failed to download book");
                     _progressTimer.Stop();
@@ -57,7 +61,7 @@ public class LibGenDownloader
         
                 Console.WriteLine();
         
-                return epub;
+                return fileInfo;
             }
             catch
             {

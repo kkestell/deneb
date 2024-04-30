@@ -69,7 +69,110 @@ public class LibGenClient
         _parser = new HtmlParser();
     }
     
-    public async Task<List<SearchResultViewModel>> Search(string author, string title)
+    public async Task<List<SearchResultViewModel>> SearchNonFiction(string author, string title)
+    {
+        if (string.IsNullOrEmpty(author) && string.IsNullOrEmpty(title))
+            return [];
+        
+        var query = Uri.EscapeDataString($"{author} {title}");
+        var format = "pdf";
+
+        var currentPage = 1;
+        int? numPages = null;
+        var results = new List<SearchResultViewModel>();
+
+        while (true)
+        {
+            if (results.Count >= 300)
+                break;
+            
+            var url = $"https://libgen.is/search.php?req={query}&res=100&page={currentPage}";
+            var response = await _client.GetAsync(url);
+            var content = await response.Content.ReadAsStringAsync();
+
+            var document = await _parser.ParseDocumentAsync(content);
+
+            // Skip the first row, which is the header
+            var rows = document.QuerySelectorAll("table.c tr").Skip(1).ToArray();
+
+            if (!numPages.HasValue)
+            {
+                var numResultsElement = document.QuerySelector("font:contains('files found')");
+                if (numResultsElement is null)
+                    break;
+                var numResultsText = numResultsElement.TextContent;
+                numResultsText = numResultsText.Split('|')[0];
+                numResultsText = new string(numResultsText.Where(char.IsDigit).ToArray());
+                var numResults = int.Parse(numResultsText);
+                numPages = (int)Math.Ceiling(numResults / (double)rows.Length);
+            }
+
+            foreach (var row in rows)
+            {
+                var cells = row.QuerySelectorAll("td");
+
+                var authorListItems = cells[1].QuerySelectorAll("a");
+
+                var authors = new List<string>();
+                foreach (var a in authorListItems)
+                {
+                    authors.Add(FixAuthor(a.TextContent));
+                }
+
+                var titleElement = cells[2].QuerySelector("a");
+                var resultTitle = titleElement.InnerHtml;
+                if (resultTitle.Contains("<"))
+                    resultTitle = resultTitle.Substring(0, resultTitle.IndexOf("<", StringComparison.Ordinal)).Trim();
+                
+                var links = cells[9].QuerySelectorAll("a");
+                if (links.Length == 0) continue;
+                var urls = new List<string>();
+                foreach (var link in links)
+                {
+                    var href = link.GetAttribute("href");
+                    if (!string.IsNullOrEmpty(href))
+                    {
+                        urls.Add(href);
+                    }
+                }
+
+                var fileType = cells[8].TextContent.Trim().ToLower();
+                var size = cells[7].TextContent.Trim();
+
+                var sizeInBytes = FileSizeToBytes(size);
+                var sizeInMegabytes = (float)sizeInBytes / 1024 / 1024;
+                var sizeStr = $"{sizeInMegabytes:F1} MB";
+
+                int score;
+                switch (string.IsNullOrEmpty(title))
+                {
+                    case false when !string.IsNullOrEmpty(author):
+                        score = FuzzySharp.Fuzz.Ratio(title, resultTitle);
+                        score += authors.Max(x => FuzzySharp.Fuzz.Ratio(author, x));
+                        score /= 2;
+                        break;
+                    case false:
+                        score = FuzzySharp.Fuzz.Ratio(title, resultTitle);
+                        break;
+                    default:
+                        score = authors.Max(x => FuzzySharp.Fuzz.Ratio(x, author));
+                        break;
+                }
+
+                var result = new SearchResultViewModel(authors, resultTitle, urls, null, fileType, sizeStr, score);
+                results.Add(result);
+            }
+
+            currentPage++;
+
+            if (currentPage > numPages) 
+                break;
+        }
+
+        return results.OrderByDescending(x => x.Score).ThenByDescending(x => x.Size).ToList();
+    }
+    
+    public async Task<List<SearchResultViewModel>> SearchFiction(string author, string title)
     {
         if (string.IsNullOrEmpty(author) && string.IsNullOrEmpty(title))
             return [];
@@ -185,7 +288,7 @@ public class LibGenClient
         return results.OrderByDescending(x => x.Score).ThenByDescending(x => x.Size).ToList();
     }
     
-    public async Task<Epub?> DownloadResult(SearchResultViewModel searchResultViewModel, Action<double>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<FileInfo?> DownloadResult(SearchResultViewModel searchResultViewModel, Action<double>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var url = searchResultViewModel.Urls[0];
         var response = await _client.GetAsync(url, cancellationToken);
@@ -212,8 +315,7 @@ public class LibGenClient
 
                 if (localPath is not null)
                 {
-                    var epub = Epub.Load(new FileInfo(localPath));
-                    return epub;
+                    return new FileInfo(localPath);
                 }
                 
                 Log.Warning($"Failed to download file from {downloadUrl}");
@@ -267,8 +369,13 @@ public class LibGenClient
     private static int FileSizeToBytes(string size)
     {
         var parts = size.Split('\u00A0');
+
+        if (parts.Length != 2)
+        {
+            parts = size.Split(' ');
+        }
         
-        if (parts.Length != 2) 
+        if (parts.Length != 2)
             return 0;
 
         if (!double.TryParse(parts[0], out var numericSize)) 

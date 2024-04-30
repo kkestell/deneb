@@ -3,7 +3,6 @@ using Deneb.Configuration;
 using Deneb.Models;
 using Deneb.Services;
 using Deneb.Utils;
-using Djinn.Utils;
 
 namespace Deneb.Commands.Handlers;
 
@@ -44,11 +43,15 @@ public class DownloadCommandHandler : ICommandHandler
     {
         var author = context.ParseResult.GetValueForOption(DownloadCommand.Author);
         var title = context.ParseResult.GetValueForOption(DownloadCommand.Title);
+        var type = context.ParseResult.GetValueForOption(DownloadCommand.Type);
+
+        if (type != BookType.Fiction && type != BookType.NonFiction)
+            throw new NotImplementedException();
         
         if (author is null && title is null)
             return false;
 
-        var books = await _openLibraryService.FindBooks(title, author);
+        var books = await _openLibraryService.FindBooks(type, title, author);
 
         if (books is null)
         {
@@ -87,7 +90,7 @@ public class DownloadCommandHandler : ICommandHandler
 
                     var selectedBookIndex = selectList.Show($"Please select a book:");
                     var selectedBook = books[selectedBookIndex];
-
+                    
                     _downloadQueue.Enqueue(selectedBook);
                 }
                 else
@@ -120,15 +123,15 @@ public class DownloadCommandHandler : ICommandHandler
 
             try
             {
-                var epub = await libGenDownloader.Download();
+                var fileInfo = await libGenDownloader.Download();
 
-                if (epub is null)
+                if (fileInfo is null)
                 {
                     _downloadQueue.Enqueue(book!);
                     continue;
                 }
 
-                _libraryService.Add(book!, epub.FilePath);
+                _libraryService.Add(book!, fileInfo);
                 
                 Log.Success($"Downloaded {book!.Title} by {book!.Author.Name}");
             }

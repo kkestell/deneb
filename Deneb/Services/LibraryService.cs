@@ -12,16 +12,18 @@ public class LibraryService
         _libraryRoot = libraryRoot;
     }
 
-    public void Add(Book book, string filePath)
+    public void Add(Book book, FileInfo fileInfo)
     {
         var bookDirectory = BookDirectory(book);
         bookDirectory.Create();
 
-        var bookFile = BookFile(book);
-        File.Copy(filePath, bookFile.FullName, true);
+        var bookFile = BookFile(book, fileInfo.Extension);
+        File.Copy(fileInfo.FullName, bookFile.FullName, true);
 
-        var epub = Epub.Load(new FileInfo(filePath));
+        if (fileInfo.Extension != ".epub") 
+            return;
         
+        var epub = Epub.Load(bookFile);
         epub.Title = book.Title;
         epub.Creators = [new() { Name = book.Author.Name, Role = Role.Author }];
         epub.Year = book.PublishedOn;
@@ -30,8 +32,7 @@ public class LibraryService
     
     public bool Contains(Book book)
     {
-        var bookFile = BookFile(book);
-        return bookFile.Exists;
+        return BookFile(book, ".epub").Exists || BookFile(book, ".pdf").Exists;
     }
     
     private DirectoryInfo BookDirectory(Book book)
@@ -46,23 +47,10 @@ public class LibraryService
         if (string.IsNullOrEmpty(title))
             title = "Unknown Title";
 
-        DirectoryInfo bookDirectory;
-
-        // if (!string.IsNullOrEmpty(book.Series) && book.SeriesNumber.HasValue)
-        // {
-        //     var series = SanitizeForPath(book.Series);
-        //     bookDirectory = new DirectoryInfo(Path.Combine(_libraryRoot.FullName, author,
-        //         $"{series} {book.SeriesNumber} - {title}"));
-        // }
-        // else
-        {
-            bookDirectory = new DirectoryInfo(Path.Combine(_libraryRoot.FullName, author, title));
-        }
-
-        return bookDirectory;
+        return new DirectoryInfo(Path.Combine(_libraryRoot.FullName, author, title));
     }
 
-    private FileInfo BookFile(Book book)
+    private FileInfo BookFile(Book book, string extension)
     {
         var bookDirectory = BookDirectory(book);
 
@@ -76,25 +64,9 @@ public class LibraryService
         if (string.IsNullOrEmpty(title))
             title = "Unknown Title";
 
-        string bookFileName;
-
-        // if (!string.IsNullOrEmpty(book.Series) && book.SeriesNumber.HasValue)
-        // {
-        //     var series = SanitizeForPath(book.Series);
-        //     bookFileName = $"{author} - {series} {book.SeriesNumber} - {title}.epub";
-        // }
-        // else
-        {
-            bookFileName = $"{author} - {title}.epub";
-        }
+        var bookFileName = $"{author} - {title}{extension}";
 
         return new FileInfo(Path.Combine(bookDirectory.FullName, bookFileName));
-    }
-
-    private FileInfo CoverFile(Book book)
-    {
-        var bookDirectory = BookDirectory(book);
-        return new FileInfo(Path.Combine(bookDirectory.FullName, "cover.jpg"));
     }
 
     private static string SanitizeForPath(string input)

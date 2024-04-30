@@ -1,3 +1,5 @@
+using Deneb.Models;
+
 namespace Deneb.Services;
 
 public class SearchResult
@@ -11,4 +13,5 @@ public class SearchResult
     public string? Language { get; set; }
     public string? Description { get; set; }
     public SearchResultCover? Cover { get; set; }
+    public BookType Type { get; set; }
 }
